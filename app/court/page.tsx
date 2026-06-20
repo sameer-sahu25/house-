@@ -92,7 +92,7 @@ export default function CourtPrepPage() {
     'How do I address the judge?',
   ];
 
-  const [messages] = useState<Message[]>([
+  const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
       type: 'ai',
@@ -173,6 +173,43 @@ export default function CourtPrepPage() {
       ),
     },
   ]);
+
+  const handleSendMessage = () => {
+    if (!inputValue.trim()) return;
+
+    const userMsg: Message = {
+      id: messages.length + 1,
+      type: 'user',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      content: inputValue,
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInputValue('');
+
+    // Simulated AI response
+    setTimeout(() => {
+      let aiResponseText = "I've received your query. In general, it is highly recommended to seek professional advice from local tenant unions or legal aid services in your county.";
+      const query = inputValue.toLowerCase();
+      if (query.includes('document') || query.includes('bring')) {
+        aiResponseText = "You should bring 3 physical copies of your lease agreement, any eviction notices, receipts or bank statements of past rent payments, and printouts of all written communication (emails, texts) with your landlord.";
+      } else if (query.includes('happen') || query.includes('hearing')) {
+        aiResponseText = "During the hearing, the landlord presents their case first, then you will have the opportunity to present your defense. Stick to the facts, speak clearly, and support your points with physical evidence.";
+      } else if (query.includes('judge') || query.includes('address')) {
+        aiResponseText = "When addressing the judge, always speak politely and address them as 'Your Honor'. Answer questions directly, do not interrupt anyone, and refer back to your documented evidence folder when explaining points.";
+      }
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: prev.length + 1,
+          type: 'ai',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          content: aiResponseText,
+        }
+      ]);
+    }, 1000);
+  };
 
   return (
     <>
@@ -729,6 +766,12 @@ export default function CourtPrepPage() {
                       e.target.value
                     )
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
                   placeholder="Ask a court preparation question..."
                   style={{
                     flex: 1,
@@ -747,6 +790,7 @@ export default function CourtPrepPage() {
 
                 <Button
                   variant="primary"
+                  onClick={handleSendMessage}
                   icon={
                     <Send
                       size={16}

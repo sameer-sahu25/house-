@@ -1,5 +1,7 @@
 'use client';
 
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '../../components/Header';
 import Button from '../../components/ui/Button';
 import {
@@ -17,12 +19,20 @@ import {
   Clock,
   Info,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
+import { getPlan, PlanData } from '../utils/api';
 
 function RiskGauge({
   value,
+  level = 'High Risk',
+  color = '#DC2626',
+  bg = '#FEE2E2',
 }: {
   value: number;
+  level?: string;
+  color?: string;
+  bg?: string;
 }) {
   const radius = 54;
   const circumference =
@@ -53,7 +63,7 @@ function RiskGauge({
           cy="70"
           r={radius}
           fill="none"
-          stroke="#FEE2E2"
+          stroke={bg}
           strokeWidth="10"
         />
 
@@ -62,7 +72,7 @@ function RiskGauge({
           cy="70"
           r={radius}
           fill="none"
-          stroke="#DC2626"
+          stroke={color}
           strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -97,14 +107,14 @@ function RiskGauge({
           style={{
             fontSize: '10px',
             fontWeight: 700,
-            color: '#DC2626',
+            color: color,
             textTransform:
               'uppercase',
             letterSpacing:
               '1px',
           }}
         >
-          High Risk
+          {level}
         </div>
       </div>
     </div>
@@ -337,6 +347,127 @@ function SummaryRow({
 const riskScore = 74;
 
 export default function LegalRiskProfilerPage() {
+  const router = useRouter();
+  const [plan, setPlan] = useState<PlanData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPlanData = async () => {
+      try {
+        const sessionId = localStorage.getItem('activeSessionId');
+        if (sessionId) {
+          const data = await getPlan(sessionId);
+          setPlan(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch plan for risk profiling:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPlanData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '80vh',
+        }}
+      >
+        <Loader2
+          size={48}
+          style={{ animation: 'spin 1.5s linear infinite', color: '#072B84', marginBottom: '20px' }}
+        />
+        <h3>Analyzing your legal risk profile...</h3>
+        <style jsx>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // CASE 1: No active plan exists
+  if (!plan) {
+    return (
+      <>
+        <Header
+          title="Legal Risk Profiler"
+          subtitle="Automated Housing Risk Assessment"
+        />
+
+        <main className="page-container" style={{ maxWidth: '800px', margin: '40px auto' }}>
+          <Card style={{ border: '1px dashed #072B84', background: '#F0F4FF', padding: '24px' }}>
+            <CardContent style={{ textAlign: 'center', paddingTop: '20px' }}>
+              <div style={{ display: 'inline-flex', padding: '16px', background: '#E8F0FF', borderRadius: '50%', color: '#072B84', marginBottom: '20px' }}>
+                <ShieldAlert size={32} />
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#072B84', marginBottom: '12px' }}>
+                No Active Risk Profile Available
+              </h2>
+              <p style={{ color: '#6B7280', fontSize: '15px', lineHeight: '24px', marginBottom: '24px' }}>
+                Complete the stability assessment in the Intake Wizard first. Our system will analyze your timeline and legal notices to generate your eviction risk profile.
+              </p>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => router.push('/intake')}
+                icon={<ArrowRight size={18} />}
+                iconPosition="right"
+              >
+                Start Housing Assessment
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </>
+    );
+  }
+
+  // Derive values from plan
+  let riskScore = 15;
+  let riskLabel = 'Low Risk';
+  let riskColor = '#10B981';
+  let riskBg = '#ECFDF5';
+  let riskDescription = 'Standard housing stability monitoring is recommended. No immediate eviction notices are pending.';
+  let criticalFactor = 'No active deadlines pending within the next 14 days.';
+  let noticeStatus = 'Inactive';
+
+  if (plan.urgencyLevel === 'High') {
+    riskScore = 92;
+    riskLabel = 'High Risk';
+    riskColor = '#DC2626';
+    riskBg = '#FEF2F2';
+    riskDescription = 'Your risk score is critically elevated due to an active landlord notice and urgent timeline. Immediate response recommended.';
+    criticalFactor = '72-Hour response window closes in less than 24 hours.';
+    noticeStatus = 'Active';
+  } else if (plan.urgencyLevel === 'Medium') {
+    riskScore = 50;
+    riskLabel = 'Medium Risk';
+    riskColor = '#D97706';
+    riskBg = '#FFFBEB';
+    riskDescription = 'Your risk score is elevated due to pending rent or maintenance timelines. Quick mitigation can reduce further legal exposure.';
+    criticalFactor = 'Deadline is approaching in less than 14 days. Mitigation recommended.';
+    noticeStatus = 'Active';
+  }
+
+  let jurisdiction = 'California';
+  const match = plan.rightsSummary.match(/Under\s+([A-Za-z\s]+)\s+state/i);
+  if (match && match[1]) {
+    jurisdiction = match[1].trim();
+  }
+
+  // Extract notice step date or tomorrow
+  const noticeSteps = plan.actionSteps.filter(s => s.urgent && !s.completed);
+  const timelineSteps = plan.actionSteps.slice(0, 2);
+
   return (
     <>
       <Header
@@ -431,6 +562,9 @@ export default function LegalRiskProfilerPage() {
                 >
                   <RiskGauge
                     value={riskScore}
+                    level={riskLabel}
+                    color={riskColor}
+                    bg={riskBg}
                   />
                 </div>
 
@@ -444,8 +578,7 @@ export default function LegalRiskProfilerPage() {
                       gap: '10px',
                       marginBottom:
                         '12px',
-                      color:
-                        '#DC2626',
+                      color: riskColor,
                     }}
                   >
                     <ShieldAlert
@@ -461,8 +594,7 @@ export default function LegalRiskProfilerPage() {
                         margin: 0,
                       }}
                     >
-                      Immediate Action
-                      Advised
+                      {riskLabel === 'Low Risk' ? 'Housing Status Secure' : 'Immediate Action Advised'}
                     </h2>
                   </div>
 
@@ -476,35 +608,15 @@ export default function LegalRiskProfilerPage() {
                         '24px',
                     }}
                   >
-                    Your risk score is
-                    elevated due to an
-                    unresolved{' '}
-                    <strong
-                      style={{
-                        color:
-                          '#111827',
-                      }}
-                    >
-                      3-Day Notice to
-                      Pay or Quit
-                    </strong>{' '}
-                    combined with
-                    limited documented
-                    communication.
-                    Immediate action
-                    can significantly
-                    reduce legal
-                    exposure.
+                    {riskDescription}
                   </p>
                 </div>
 
                 {/* Critical Action */}
                 <Card
                   style={{
-                    background:
-                      '#FEF2F2',
-                    border:
-                      '1px solid #FECACA',
+                    background: riskBg,
+                    border: `1px solid ${riskColor}40`,
                   }}
                 >
                   <CardContent
@@ -521,8 +633,7 @@ export default function LegalRiskProfilerPage() {
                           700,
                         textTransform:
                           'uppercase',
-                        color:
-                          '#B91C1C',
+                        color: riskColor,
                         marginBottom:
                           '8px',
                       }}
@@ -536,21 +647,18 @@ export default function LegalRiskProfilerPage() {
                           '13px',
                         lineHeight:
                           '22px',
-                        color:
-                          '#991B1B',
+                        color: riskColor,
                         marginBottom:
                           '16px',
                       }}
                     >
-                      72-Hour response
-                      window closes in
-                      less than 24
-                      hours.
+                      {criticalFactor}
                     </p>
 
                     <Button
                       variant="primary"
                       fullWidth
+                      onClick={() => router.push('/action-plans')}
                       icon={
                         <ArrowRight
                           size={16}
@@ -577,7 +685,7 @@ export default function LegalRiskProfilerPage() {
           }}
           className="risk-main-grid"
         >
-                  {/* LEFT COLUMN */}
+          {/* LEFT COLUMN */}
           <Card>
             <CardContent
               style={{
@@ -652,10 +760,10 @@ export default function LegalRiskProfilerPage() {
                     />
                   }
                   title="Formal Legal Notices"
-                  description="A written statutory notice has been issued. This starts the formal legal eviction timeline."
-                  level="Critical"
-                  color="#DC2626"
-                  background="#FEF2F2"
+                  description="A written notice or active timeline step requires your urgent attention."
+                  level={riskLabel === 'High Risk' ? 'Critical' : 'Minimal'}
+                  color={riskLabel === 'High Risk' ? '#DC2626' : '#10B981'}
+                  background={riskLabel === 'High Risk' ? '#FEF2F2' : '#ECFDF5'}
                 />
 
                 <RiskVector
@@ -665,10 +773,10 @@ export default function LegalRiskProfilerPage() {
                     />
                   }
                   title="Financial Arrears Timeline"
-                  description="Outstanding balance exceeds one rental cycle and continues accumulating penalties."
-                  level="Warning"
-                  color="#D97706"
-                  background="#FFFBEB"
+                  description="Tracking how income and rent ratio impacts your housing stability."
+                  level={plan.actionSteps.some(s => s.category === 'Financial' && !s.completed) ? 'Warning' : 'Secure'}
+                  color={plan.actionSteps.some(s => s.category === 'Financial' && !s.completed) ? '#D97706' : '#10B981'}
+                  background={plan.actionSteps.some(s => s.category === 'Financial' && !s.completed) ? '#FFFBEB' : '#ECFDF5'}
                 />
 
                 <RiskVector
@@ -678,7 +786,7 @@ export default function LegalRiskProfilerPage() {
                     />
                   }
                   title="Communication Audit Trail"
-                  description="Most landlord communication is undocumented and occurring outside written channels."
+                  description="Documenting landlord correspondence and proof of payments."
                   level="Elevated"
                   color="#2563EB"
                   background="#EFF6FF"
@@ -691,10 +799,10 @@ export default function LegalRiskProfilerPage() {
                     />
                   }
                   title="Lease & Habitability Compliance"
-                  description="Lease documentation is verified and available for legal review."
-                  level="Secure"
-                  color="#10B981"
-                  background="#ECFDF5"
+                  description="Required lease and proof of residence documents gathered."
+                  level={plan.documentsNeeded.length > 0 ? 'Secure' : 'Incomplete'}
+                  color={plan.documentsNeeded.length > 0 ? '#10B981' : '#D97706'}
+                  background={plan.documentsNeeded.length > 0 ? '#ECFDF5' : '#FFFBEB'}
                 />
               </div>
             </CardContent>
@@ -764,22 +872,24 @@ export default function LegalRiskProfilerPage() {
                     }}
                   />
 
-                  <TimelineStep
-                    active
-                    title="Notice Expiration"
-                    date="October 12th (Tomorrow)"
-                    description="Landlord gains right to move case toward court filing."
-                  />
-
-                  <TimelineStep
-                    title="Legal Summons Response"
-                    date="Within 5 Days of Filing"
-                    description="Failure to respond may result in default judgment."
-                  />
+                  {timelineSteps.length > 0 ? (
+                    timelineSteps.map((step, idx) => (
+                      <TimelineStep
+                        key={step.number}
+                        active={idx === 0 && plan.urgencyLevel === 'High'}
+                        title={step.title}
+                        date={step.badge || 'Pending'}
+                        description={step.description}
+                      />
+                    ))
+                  ) : (
+                    <p style={{ fontSize: '13px', color: '#6B7280' }}>No timeline steps generated.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
-                        {/* AI Recommendation */}
+
+            {/* AI Recommendation */}
             <Card variant="accent">
               <CardContent
                 style={{
@@ -821,8 +931,7 @@ export default function LegalRiskProfilerPage() {
                     color: '#FFFFFF',
                   }}
                 >
-                  Generate a
-                  Proof-of-Rent Letter
+                  Generate a Landlord Letter
                 </h3>
 
                 <p
@@ -842,6 +951,7 @@ export default function LegalRiskProfilerPage() {
                 <Button
                   variant="secondary"
                   fullWidth
+                  onClick={() => router.push('/action-plans')}
                 >
                   Launch Document Builder
                 </Button>
@@ -874,23 +984,23 @@ export default function LegalRiskProfilerPage() {
                 >
                   <SummaryRow
                     label="Jurisdiction"
-                    value="California"
+                    value={jurisdiction}
                   />
 
                   <SummaryRow
                     label="Risk Level"
-                    value="High"
-                    danger
+                    value={plan.urgencyLevel}
+                    danger={plan.urgencyLevel === 'High'}
                   />
 
                   <SummaryRow
                     label="Notice Status"
-                    value="Active"
+                    value={noticeStatus}
                   />
 
                   <SummaryRow
                     label="Documents Verified"
-                    value="Yes"
+                    value={plan.documentsNeeded.length > 0 ? 'Yes' : 'No'}
                   />
                 </div>
               </CardContent>

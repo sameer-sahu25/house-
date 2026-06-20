@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import {
   Plus,
@@ -8,6 +9,10 @@ import {
   Calendar,
   Users,
   ListTodo,
+  AlertTriangle,
+  Loader2,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 
 import Button from '../components/ui/Button';
@@ -16,6 +21,7 @@ import {
   Card,
   CardContent,
 } from '../components/ui/Card';
+import { getPlan, updateProgress, PlanData } from './utils/api';
 
 type StatCardProps = {
   icon: React.ReactNode;
@@ -43,8 +49,7 @@ function StatCard({
               width: '52px',
               height: '52px',
               borderRadius: '8px',
-              border:
-                '1px solid #D9DDE5',
+              border: '1px solid #D9DDE5',
               background: '#F9FAFB',
               display: 'flex',
               alignItems: 'center',
@@ -219,15 +224,21 @@ function TimelineItem({
 }
 
 function TaskCard({
+  number,
   title,
   desc,
   due,
   urgent = false,
+  completed = false,
+  onToggle,
 }: {
+  number: number;
   title: string;
   desc: string;
   due?: string;
   urgent?: boolean;
+  completed?: boolean;
+  onToggle: (stepNumber: number, checked: boolean) => void;
 }) {
   return (
     <div
@@ -237,14 +248,19 @@ function TaskCard({
         padding: '16px',
         display: 'flex',
         gap: '12px',
+        opacity: completed ? 0.7 : 1,
+        transition: 'all 0.2s ease',
       }}
     >
       <input
         type="checkbox"
+        checked={completed}
+        onChange={(e) => onToggle(number, e.target.checked)}
         style={{
           width: '16px',
           height: '16px',
           marginTop: '2px',
+          cursor: 'pointer',
         }}
       />
 
@@ -253,6 +269,7 @@ function TaskCard({
           style={{
             fontWeight: 600,
             marginBottom: '4px',
+            textDecoration: completed ? 'line-through' : 'none',
           }}
         >
           {title}
@@ -274,9 +291,7 @@ function TaskCard({
               marginTop: '10px',
               fontSize: '12px',
               fontWeight: 600,
-              color: urgent
-                ? '#DC2626'
-                : '#6B7280',
+              color: urgent ? '#DC2626' : '#6B7280',
             }}
           >
             {due}
@@ -289,32 +304,154 @@ function TaskCard({
 
 const activityData = [20, 45, 15, 80, 40, 10, 30];
 
-const progress = 68;
-
-const stats = [
-  {
-    title: 'TASKS COMPLETED',
-    value: '24 / 32',
-    icon: <CheckCircle2 size={20} color="#2563EB" />,
-  },
-  {
-    title: 'REMAINING',
-    value: '8',
-    icon: <ListTodo size={20} color="#6B7280" />,
-  },
-  {
-    title: 'DEADLINES',
-    value: '3 Soon',
-    icon: <Calendar size={20} color="#EF4444" />,
-  },
-  {
-    title: 'RESOURCES',
-    value: '12 Contacted',
-    icon: <Users size={20} color="#6B7280" />,
-  },
-];
-
 export default function Dashboard() {
+  const router = useRouter();
+  const [plan, setPlan] = useState<PlanData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const activeId = localStorage.getItem('activeSessionId');
+        if (activeId) {
+          setSessionId(activeId);
+          const data = await getPlan(activeId);
+          setPlan(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard plan data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const handleToggleTask = async (stepNumber: number, checked: boolean) => {
+    if (!plan || !sessionId) return;
+    try {
+      // Optimistic state update
+      const updatedSteps = plan.actionSteps.map((step) => {
+        if (step.number === stepNumber) {
+          return { ...step, completed: checked };
+        }
+        return step;
+      });
+      setPlan({ ...plan, actionSteps: updatedSteps });
+
+      // Patch backend
+      await updateProgress(sessionId, stepNumber, checked);
+    } catch (err) {
+      console.error('Failed to toggle task progress:', err);
+      // Revert state
+      const revertedSteps = plan.actionSteps.map((step) => {
+        if (step.number === stepNumber) {
+          return { ...step, completed: !checked };
+        }
+        return step;
+      });
+      setPlan({ ...plan, actionSteps: revertedSteps });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '80vh',
+        }}
+      >
+        <Loader2
+          size={48}
+          style={{ animation: 'spin 1.5s linear infinite', color: '#072B84', marginBottom: '20px' }}
+        />
+        <h3>Loading your dashboard...</h3>
+        <style jsx>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // CASE 1: No active session plan exists yet
+  if (!plan) {
+    return (
+      <>
+        <Header
+          title="Dashboard"
+          subtitle="Get started on your housing stability journey"
+        />
+
+        <main className="page-container" style={{ maxWidth: '800px', margin: '40px auto' }}>
+          <Card style={{ border: '1px dashed #072B84', background: '#F0F4FF', padding: '24px' }}>
+            <CardContent style={{ textAlign: 'center', paddingTop: '20px' }}>
+              <div style={{ display: 'inline-flex', padding: '16px', background: '#E8F0FF', borderRadius: '50%', color: '#072B84', marginBottom: '20px' }}>
+                <Sparkles size={32} />
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#072B84', marginBottom: '12px' }}>
+                Create Your Personalized Stability Plan
+              </h2>
+              <p style={{ color: '#6B7280', fontSize: '15px', lineHeight: '24px', marginBottom: '24px' }}>
+                You have not completed a stability assessment yet. Fill out the Intake Wizard to receive an AI-powered legal action timeline, custom rights analysis, and resource recommendations.
+              </p>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => router.push('/intake')}
+                icon={<ArrowRight size={18} />}
+                iconPosition="right"
+              >
+                Start Housing Assessment
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </>
+    );
+  }
+
+  // CASE 2: Active plan exists
+  const totalTasks = plan.actionSteps.length;
+  const completedTasks = plan.actionSteps.filter((s) => s.completed).length;
+  const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const remainingTasks = totalTasks - completedTasks;
+  const urgentCount = plan.actionSteps.filter((s) => s.urgent && !s.completed).length;
+
+  // Next steps to list (first 3 incomplete tasks)
+  const nextSteps = plan.actionSteps.filter((s) => !s.completed).slice(0, 3);
+
+  const stats = [
+    {
+      title: 'TASKS COMPLETED',
+      value: `${completedTasks} / ${totalTasks}`,
+      icon: <CheckCircle2 size={20} color="#2563EB" />,
+    },
+    {
+      title: 'REMAINING',
+      value: `${remainingTasks}`,
+      icon: <ListTodo size={20} color="#6B7280" />,
+    },
+    {
+      title: 'DEADLINES',
+      value: `${urgentCount} Soon`,
+      icon: <Calendar size={20} color="#EF4444" />,
+    },
+    {
+      title: 'RESOURCES',
+      value: `${plan.documentsNeeded.length} Required`,
+      icon: <Users size={20} color="#6B7280" />,
+    },
+  ];
+
   return (
     <>
       <Header
@@ -352,18 +489,17 @@ export default function Dashboard() {
                 fontSize: '14px',
               }}
             >
-              Your housing stability journey is 68%
-              complete. You're making excellent
-              progress.
+              Your housing stability journey is {progressPercent}% complete. Keep completing items on your timeline.
             </p>
           </div>
 
           <Button
             variant="primary"
             size="lg"
+            onClick={() => router.push('/action-plans')}
             icon={<Plus size={18} />}
           >
-            New Task
+            View Full Plan
           </Button>
         </section>
 
@@ -371,8 +507,7 @@ export default function Dashboard() {
         <section
           style={{
             display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit,minmax(240px,1fr))',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))',
             gap: '24px',
             marginBottom: '24px',
           }}
@@ -391,8 +526,7 @@ export default function Dashboard() {
         <section
           style={{
             display: 'grid',
-            gridTemplateColumns:
-              '2fr 1fr',
+            gridTemplateColumns: '2fr 1fr',
             gap: '24px',
             marginBottom: '24px',
           }}
@@ -404,8 +538,7 @@ export default function Dashboard() {
               <div
                 style={{
                   display: 'flex',
-                  justifyContent:
-                    'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '20px',
                 }}
@@ -427,12 +560,12 @@ export default function Dashboard() {
                     fontSize: '14px',
                   }}
                 >
-                  {progress}% Total
+                  {progressPercent}% Total
                 </span>
               </div>
 
               <ProgressBar
-                value={progress}
+                value={progressPercent}
                 size="md"
                 variant="primary"
               />
@@ -449,17 +582,17 @@ export default function Dashboard() {
               >
                 <Legend
                   color="#072B84"
-                  label="Legal Intake (100%)"
+                  label="Legal Actions"
                 />
 
                 <Legend
                   color="#2563EB"
-                  label="Financial Aid (60%)"
+                  label="Financial Context"
                 />
 
                 <Legend
                   color="#1E40AF"
-                  label="Housing Search (35%)"
+                  label="Housing Search"
                 />
               </div>
 
@@ -468,8 +601,7 @@ export default function Dashboard() {
                 <div
                   style={{
                     display: 'flex',
-                    justifyContent:
-                      'space-between',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     marginBottom: '18px',
                   }}
@@ -480,8 +612,7 @@ export default function Dashboard() {
                       color: '#6B7280',
                     }}
                   >
-                    Activity Level
-                    (Last 7 Days)
+                    Activity Level (Last 7 Days)
                   </h4>
 
                   <span
@@ -502,30 +633,23 @@ export default function Dashboard() {
                     height: '140px',
                   }}
                 >
-                  {activityData.map(
-                    (value, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          flex: 1,
-                          height: `${value}%`,
-                          background:
-                            value === 80
-                              ? '#072B84'
-                              : '#D9DDE5',
-                          borderRadius:
-                            '4px 4px 0 0',
-                        }}
-                      />
-                    )
-                  )}
+                  {activityData.map((value, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        flex: 1,
+                        height: `${value}%`,
+                        background: value === 80 ? '#072B84' : '#D9DDE5',
+                        borderRadius: '4px 4px 0 0',
+                      }}
+                    />
+                  ))}
                 </div>
 
                 <div
                   style={{
                     display: 'flex',
-                    justifyContent:
-                      'space-between',
+                    justifyContent: 'space-between',
                     marginTop: '10px',
                     fontSize: '12px',
                     color: '#6B7280',
@@ -542,7 +666,8 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-                    {/* Achievements */}
+
+          {/* Achievements */}
           <Card
             variant="accent"
             style={{
@@ -564,40 +689,39 @@ export default function Dashboard() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns:
-                    'repeat(2,minmax(0,1fr))',
+                  gridTemplateColumns: 'repeat(2,minmax(0,1fr))',
                   gap: '12px',
                 }}
               >
                 <AchievementBadge
                   title="First Steps Complete"
-                  active
+                  active={completedTasks > 0}
                 />
 
                 <AchievementBadge
                   title="Rights Advocate"
-                  active
+                  active={progressPercent >= 50}
                 />
 
                 <AchievementBadge
                   title="Stability Master"
+                  active={progressPercent === 100}
                 />
 
                 <AchievementBadge
                   title="Legal Expert"
+                  active={completedTasks >= 4}
                 />
               </div>
 
               <div
                 style={{
                   marginTop: '20px',
-                  background:
-                    'rgba(255,255,255,.12)',
+                  background: 'rgba(255,255,255,.12)',
                   borderRadius: '8px',
                   padding: '14px',
                   display: 'flex',
-                  justifyContent:
-                    'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                 }}
               >
@@ -612,9 +736,7 @@ export default function Dashboard() {
                     Next Reward
                   </div>
 
-                  <strong>
-                    Stability Toolkit v2
-                  </strong>
+                  <strong>Stability Toolkit v2</strong>
                 </div>
 
                 <span
@@ -633,20 +755,18 @@ export default function Dashboard() {
         <section
           style={{
             display: 'grid',
-            gridTemplateColumns:
-              '1fr 1fr',
+            gridTemplateColumns: '1fr 1fr',
             gap: '24px',
           }}
           className="dashboard-bottom-grid"
         >
-          {/* Timeline */}
+          {/* Action History */}
           <Card>
             <CardContent style={{ paddingTop: '20px' }}>
               <div
                 style={{
                   display: 'flex',
-                  justifyContent:
-                    'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '24px',
                 }}
@@ -680,21 +800,15 @@ export default function Dashboard() {
 
                 <TimelineItem
                   active
-                  date="Today, 2:15 PM"
-                  title="Completed Housing Stability Survey"
-                  desc="Automated risk scores updated based on new rental data."
+                  date="Today"
+                  title="Stability Plan Created"
+                  desc="Custom AI-powered actions and deadlines successfully synced."
                 />
 
                 <TimelineItem
-                  date="Yesterday, 9:00 AM"
-                  title="Legal Document Uploaded"
-                  desc="Lease_Agreement_2024.pdf processed successfully."
-                />
-
-                <TimelineItem
-                  date="Oct 24, 4:45 PM"
-                  title="Court Prep Consultation Scheduled"
-                  desc="Meeting with pro bono counsel confirmed."
+                  date="Intake Completed"
+                  title="Housing Survey Submitted"
+                  desc={`Location and financial inputs captured for state of ${plan.actionSteps[0]?.description ? 'residence' : 'record'}.`}
                 />
               </div>
             </CardContent>
@@ -706,8 +820,7 @@ export default function Dashboard() {
               <div
                 style={{
                   display: 'flex',
-                  justifyContent:
-                    'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '24px',
                 }}
@@ -721,47 +834,47 @@ export default function Dashboard() {
                   Priority Next Steps
                 </h3>
 
-                <span
-                  style={{
-                    background: '#FEE2E2',
-                    color: '#DC2626',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    padding:
-                      '4px 10px',
-                    borderRadius:
-                      '999px',
-                  }}
-                >
-                  URGENT
-                </span>
+                {urgentCount > 0 && (
+                  <span
+                    style={{
+                      background: '#FEE2E2',
+                      color: '#DC2626',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                    }}
+                  >
+                    URGENT
+                  </span>
+                )}
               </div>
 
               <div
                 style={{
                   display: 'flex',
-                  flexDirection:
-                    'column',
+                  flexDirection: 'column',
                   gap: '12px',
                 }}
               >
-                <TaskCard
-                  urgent
-                  title="Review Tenant Rights Brief"
-                  desc="Crucial for your upcoming Section 8 consultation."
-                  due="Due in 2 days"
-                />
-
-                <TaskCard
-                  title="Contact Resource Hub"
-                  desc="Ask about emergency utility assistance."
-                  due="Due in 5 days"
-                />
-
-                <TaskCard
-                  title="Upload Income Statements"
-                  desc="Needed for updated financial eligibility calculations."
-                />
+                {nextSteps.length > 0 ? (
+                  nextSteps.map((step) => (
+                    <TaskCard
+                      key={step.number}
+                      number={step.number}
+                      title={step.title}
+                      desc={step.description}
+                      due={step.badge}
+                      urgent={step.urgent}
+                      completed={step.completed}
+                      onToggle={handleToggleTask}
+                    />
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#6B7280', fontSize: '14px' }}>
+                    🎉 All tasks completed! Great job!
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

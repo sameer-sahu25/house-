@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import Header from '../../components/Header';
 import Button from '../../components/ui/Button';
@@ -337,6 +338,7 @@ type RightsCardData = {
 };
 
 export default function TenantRightsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] =
     useState<RightsTab>(
       'Eviction Process'
@@ -623,6 +625,7 @@ export default function TenantRightsPage() {
 
               <Button
                 variant="secondary"
+                onClick={() => router.push('/resources')}
                 icon={
                   <FileText
                     size={16}
@@ -714,6 +717,7 @@ export default function TenantRightsPage() {
                 <Button
                   variant="primary"
                   size="lg"
+                  onClick={() => alert('Notice summarizer tool will be active in the next version. Please use the Intake Wizard to generate your plan and analyze your legal risk.')}
                   icon={<Upload size={16} />}
                 >
                   Upload Notice

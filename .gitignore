@@ -3,6 +3,9 @@
 /.pnp
 .pnp.js
 
+# Backend node_modules
+backend/node_modules/
+
 # testing
 /coverage
 
@@ -21,9 +24,20 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# Environment variables (keep secrets out of git)
+.env
+backend/.env
+
 # Vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Screenshots / media temp
+screenshots/

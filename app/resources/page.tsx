@@ -894,6 +894,7 @@ export default function ResourceFinderPage() {
                   <Button
                     variant="secondary"
                     fullWidth
+                    onClick={() => alert("Thank you! We've forwarded your case files to the Legal Rights Defense Foundation. A housing attorney will contact you shortly.")}
                     style={{
                       marginTop:
                         '16px',
