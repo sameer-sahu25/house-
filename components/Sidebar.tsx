@@ -69,10 +69,9 @@ export default function Sidebar() {
   const handleLogout = () => {
     setIsLoggingOut(true);
     setMobileOpen(false);
-    // Fire API call in background — do not await it
     logout().catch(() => {});
-    // Hard redirect — forces full page reload so user sees clear change
-    window.location.replace('/intake?loggedOut=1');
+    // Redirect to standalone login page (no Sidebar/Header)
+    window.location.replace('/login?loggedOut=1');
   };
 
   return (

@@ -36,10 +36,9 @@ export default function Header({ title, subtitle }: HeaderProps) {
   const handleLogout = () => {
     setIsLoggingOut(true);
     setDropdownOpen(false);
-    // Fire API call in background — do not await it
     logout().catch(() => {});
-    // Hard redirect — forces full page reload so user sees clear change
-    window.location.replace('/intake?loggedOut=1');
+    // Redirect to standalone login page (no Sidebar/Header)
+    window.location.replace('/login?loggedOut=1');
   };
 
   // Shorten sessionId for display: show first 8 chars
